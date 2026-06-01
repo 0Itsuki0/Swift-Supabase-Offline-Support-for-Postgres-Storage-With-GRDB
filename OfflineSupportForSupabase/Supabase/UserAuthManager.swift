@@ -111,32 +111,21 @@ nonisolated
         }
 
         let waitTask = Task {
-            try await withTimeout(
-                seconds: self.timeout,
-                operation: { [weak self] in
-                    guard let self else {
-                        return
-                    }
-                    var timeElapsed: TimeInterval = 0
-                    while !self.refreshSessionFinished
-                        && timeElapsed < self.timeout * 1000
-                    {
-                        try await Task.sleep(for: .milliseconds(10))
-                        timeElapsed += 10
-                        if self.refreshSessionFinished {
-                            break
-                        }
-                    }
-                },
-                cancellationError: SyncError.networkUnavailable,
-                onTimeout: {
-                    refreshTask.cancel()
+            var timeElapsed: TimeInterval = 0
+            while !self.refreshSessionFinished
+                && timeElapsed < self.timeout * 1000
+            {
+                try await Task.sleep(for: .milliseconds(10))
+                timeElapsed += 10
+                if self.refreshSessionFinished {
+                    break
                 }
-            )
+            }
+            throw SyncError.networkUnavailable
         }
 
         // wait for waitTask instead because refreshSession does not respond to task cancellation correctly
-        // (due to objective C implementation
+        // (due to objective C implementation and checked continuation)
         let result = await waitTask.result
         refreshTask.cancel()
         if self.refreshSessionFinished {
