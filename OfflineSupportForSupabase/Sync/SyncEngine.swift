@@ -18,11 +18,6 @@ nonisolated
     private static var local: LocalDatabaseManager {
         AppDependencies.shared.localDB
     }
-    private static var db: DatabasePool {
-        get throws {
-            try local.dbPool
-        }
-    }
     private static var remote: SupabaseClient {
         AppDependencies.shared.remoteClient
     }
