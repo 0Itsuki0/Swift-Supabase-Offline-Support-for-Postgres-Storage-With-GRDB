@@ -19,6 +19,7 @@
 		98B2C8B52FCBDA2F00562FCA /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		98B2C9062FCCF7CB00562FCA /* supabase.sql */ = {isa = PBXFileReference; lastKnownFileType = text; path = supabase.sql; sourceTree = "<group>"; };
 		98B2C90C2FCD350800562FCA /* demo.gif */ = {isa = PBXFileReference; lastKnownFileType = image.gif; path = demo.gif; sourceTree = "<group>"; };
+		98B2C9192FCD36BF00562FCA /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				98B2C9062FCCF7CB00562FCA /* supabase.sql */,
+				98B2C9192FCD36BF00562FCA /* LICENSE */,
 				98B2C8B52FCBDA2F00562FCA /* README.md */,
 				98B2C90C2FCD350800562FCA /* demo.gif */,
 				98B2BE842FC7DB4C00562FCA /* OfflineSupportForSupabase */,
