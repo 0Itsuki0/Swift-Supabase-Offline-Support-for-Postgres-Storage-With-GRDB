@@ -117,11 +117,13 @@ nonisolated
             {
                 try await Task.sleep(for: .milliseconds(10))
                 timeElapsed += 10
-                if self.refreshSessionFinished || timeElapsed >= self.timeout * 1000 {
+                if self.refreshSessionFinished {
                     break
                 }
+                if timeElapsed >= self.timeout * 1000 {
+                    throw SyncError.networkUnavailable
+                }
             }
-            throw SyncError.networkUnavailable
         }
 
         // wait for waitTask instead because refreshSession does not respond to task cancellation correctly
