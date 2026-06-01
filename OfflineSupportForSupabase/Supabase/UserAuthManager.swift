@@ -117,7 +117,7 @@ nonisolated
             {
                 try await Task.sleep(for: .milliseconds(10))
                 timeElapsed += 10
-                if self.refreshSessionFinished {
+                if self.refreshSessionFinished || timeElapsed >= self.timeout * 1000 {
                     break
                 }
             }
