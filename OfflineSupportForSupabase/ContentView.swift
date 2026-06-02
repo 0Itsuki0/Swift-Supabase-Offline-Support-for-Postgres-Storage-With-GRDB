@@ -326,22 +326,34 @@ private struct TodoListView: View {
     }
 
     // MARK: - Actions
-
+    
     // automatically sync when possible
     private func loadTodos() {
         print(#function)
         Task {
             do {
                 self.initializing = true
-                if let listID {
-                    self.list = try await TodoList.fetchOne(listID)
+                for try await todos in TodoItem.all() {
+                    self.todos = todos
                 }
-                todos = try await TodoItem.all()
             } catch (let error) {
                 print(error)
             }
             self.initializing = false
         }
+        
+        if let listID {
+            Task {
+                do {
+                    for try await list in TodoList.fetchOne(listID) {
+                        self.list = list
+                    }
+                } catch (let error) {
+                    print(error)
+                }
+            }
+        }
+
     }
 
     private func addTodo() {

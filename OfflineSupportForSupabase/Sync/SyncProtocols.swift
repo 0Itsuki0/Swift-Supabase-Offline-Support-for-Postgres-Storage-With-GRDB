@@ -68,13 +68,12 @@ nonisolated
     }
 }
 
-
 // MARK: - Custom Conflict Handling per record if needed
 nonisolated
     enum ChangeHandlingResult<T: SyncableRecord>
 {
-    case handled(T?) // record has custom handling
-    case notHandled // use the default LWW implementation in SyncEngine
+    case handled(T?)  // record has custom handling
+    case notHandled  // use the default LWW implementation in SyncEngine
 }
 
 // MARK: - SyncableRecord
@@ -126,10 +125,22 @@ where ID == UUID {
 
     mutating func upsert() async throws
     mutating func delete() async throws
+
+    // Fetches return async stream for responsive UI:
+    // - yield Local first
+    // - try to sync with the server if possible
+    // - yield the final
+    static func fetchOne(_ id: UUID) -> AsyncThrowingStream<Self?, Error>
+    static func all() -> AsyncThrowingStream<[Self], Error>
+    static func fetch(from fromDate: Date?, to toDate: Date?)
+        -> AsyncThrowingStream<[Self], Error>
+
+    // overload with regular async await
     static func fetchOne(_ id: UUID) async throws -> Self?
     static func all() async throws -> [Self]
     static func fetch(from fromDate: Date?, to toDate: Date?) async throws
         -> [Self]
+
 }
 
 // MARK: - default CRUD implementations
@@ -143,19 +154,42 @@ nonisolated extension SyncableRecord {
         try await SyncEngine<Self>.delete(record: self)
     }
 
+    // Fetches return async stream for responsive UI:
+    // - yield Local first
+    // - try to sync with the server if possible
+    // - yield the final
+    static func fetchOne(_ id: UUID) -> AsyncThrowingStream<Self?, Error> {
+        return SyncEngine<Self>.fetchOne(id: id)
+    }
+
+    static func all() -> AsyncThrowingStream<[Self], Error> {
+        return Self.fetch(from: nil, to: nil)
+    }
+
+    static func fetch(from fromDate: Date?, to toDate: Date?)
+        -> AsyncThrowingStream<[Self], Error>
+    {
+        return SyncEngine<Self>.fetch(from: fromDate, to: toDate)
+    }
+
     static func fetchOne(_ id: UUID) async throws -> Self? {
-        return try await SyncEngine<Self>.fetchOne(id: id)
+        return try await self.fetchOne(id).collect().last ?? nil
     }
 
     static func all() async throws -> [Self] {
-        return try await Self.fetch(from: nil, to: nil)
+        return try await self.fetch(from: nil, to: nil)
     }
 
     static func fetch(from fromDate: Date?, to toDate: Date?) async throws
         -> [Self]
     {
-        return try await SyncEngine<Self>.fetch(from: fromDate, to: toDate)
+        let stream: AsyncThrowingStream<[Self], Error> = self.fetch(
+            from: fromDate,
+            to: toDate
+        )
+        return try await stream.collect().last ?? []
     }
+
 }
 
 // MARK: - default conflict handler
@@ -175,7 +209,6 @@ nonisolated extension SyncableRecord {
         return .notHandled
     }
 }
-
 
 // MARK: - SyncResult
 // The result can be stored in a database table if sync tracking/audit is needed.

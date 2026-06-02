@@ -422,48 +422,113 @@ nonisolated
     // - persists
     // - resolves deletion
     // - syncs pending states
-    static func fetchOne(id: UUID) async throws -> Record? {
-        let payload: Record.LocalPayload? = try await self.local.fetchOne(
-            id: id
-        )
+    static func fetchOne(id: UUID) -> AsyncThrowingStream<Record?, Error> {
+        return AsyncThrowingStream<Record?, Error> { continuation in
+            Task {
+                defer {
+                    continuation.finish()
+                }
 
-        let local: Record? = payload.map({ .fromLocal($0) })
+                let payload: Record.LocalPayload? = try await self.local
+                    .fetchOne(
+                        id: id
+                    )
 
-        guard network.isConnected else {
-            return visibleRecord(local)
+                let local: Record? = payload.map({ .fromLocal($0) })
+
+                // yield local first
+                continuation.yield(visibleRecord(local))
+
+                guard network.isConnected else {
+                    return
+                }
+
+                do {
+                    var result = SyncResult()
+
+                    let remote: Record.RemotePayload? =
+                        try await remote.fetchOne(
+                            table: Record.databaseTableName,
+                            id: id
+                        )
+
+                    if let remote {
+                        let remote = Record.fromRemote(remote)
+                        let resolvedRecord = try await self.mergeRemote(
+                            remote: remote,
+                            local: local,
+                            result: &result
+                        )
+                        continuation.yield(visibleRecord(resolvedRecord))
+                        return
+                    }
+
+                    // remote doesn't exist but local does
+                    if let local, remote == nil {
+                        let record = try await resolvePendingLocal(
+                            local: local,
+                            remote: nil,
+                            result: &result
+                        )
+                        continuation.yield(visibleRecord(record))
+                        return
+                    }
+
+                    continuation.yield(nil)
+                    return
+                } catch (let error) {
+                    logError("Error syncing with remote: \(error)")
+                    continuation.yield(visibleRecord(local))
+                    return
+                }
+            }
         }
+    }
 
-        do {
-            var result = SyncResult()
+    static func fetch(from fromDate: Date? = nil, to toDate: Date? = nil)
+        -> AsyncThrowingStream<[Record], Error>
+    {
+        return AsyncThrowingStream<[Record], Error> { continuation in
+            Task {
+                defer {
+                    continuation.finish()
+                }
 
-            let remote: Record.RemotePayload? = try await remote.fetchOne(
-                table: Record.databaseTableName,
-                id: id
-            )
-
-            if let remote {
-                let remote = Record.fromRemote(remote)
-                let resolvedRecord = try await self.mergeRemote(
-                    remote: remote,
-                    local: local,
-                    result: &result
+                var local: [Record.LocalPayload] = try await self.local.fetch(
+                    from: fromDate,
+                    to: toDate,
+                    filter: Column("sync_status") != SyncStatus.deleted.rawValue
                 )
-                return resolvedRecord
-            }
 
-            // remote doesn't exist but local does
-            if let local, remote == nil {
-                return try await resolvePendingLocal(
-                    local: local,
-                    remote: nil,
-                    result: &result
+                // yield local first
+                continuation.yield(
+                    local.map({ .fromLocal($0) }).filter({
+                        $0.syncStatus != .deleted
+                    })
                 )
-            }
 
-            return nil
-        } catch (let error) {
-            logError("Error syncing with remote: \(error)")
-            return visibleRecord(local)
+                guard network.isConnected else {
+                    return
+                }
+
+                let result = await self.sync()
+                if !result.errors.isEmpty {
+                    // not throwing here. just try to sync the next time.
+                    logError("Error syncing with remote: \(result.errors)")
+                }
+
+                local = try await self.local.fetch(
+                    from: fromDate,
+                    to: toDate,
+                    filter: Column("sync_status") != SyncStatus.deleted.rawValue
+                )
+                continuation.yield(
+                    local.map({ .fromLocal($0) }).filter({
+                        $0.syncStatus != .deleted
+                    })
+                )
+                return
+            }
         }
     }
 
@@ -473,21 +538,4 @@ nonisolated
         record?.syncStatus == .deleted ? nil : record
     }
 
-    static func fetch(from fromDate: Date? = nil, to toDate: Date? = nil)
-        async throws -> [Record]
-    {
-        if network.isConnected {
-            let result = await self.sync()
-            if !result.errors.isEmpty {
-                logError("Error syncing with remote: \(result.errors)")
-            }
-        }
-        let local: [Record.LocalPayload] = try await self.local.fetch(
-            from: fromDate,
-            to: toDate,
-            filter: Column("sync_status") != SyncStatus.deleted.rawValue
-        )
-        return local.map({ .fromLocal($0) })
-    }
 }
-

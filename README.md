@@ -1,4 +1,4 @@
-# Swift/Supabase: Offline Support for Postgres/Storage With GRDB
+# Swift/Supabase: Offline First Sync Layer for Postgres/Storage With GRDB
 
 **A generic offline-first sync layer**
 for iOS apps using **GRDB** (local SQLite) and **Supabase** (remote Postgres + Storage). Records sync bidirectionally with last-write-wins (LWW) conflict resolution, keyset pagination, and optional file attachment support.
