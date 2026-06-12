@@ -27,54 +27,62 @@ nonisolated
     // NOT spawning to a separate spread because
     // 1.  when sync, the last updated date cannot be updated until this success
     // 2. sync happens parallel for different tables so this will not effect other tables.
-    static func hydrate(_ local: FileAttachment) async throws {
-
-        // Already cached locally
-        if local.downloadState == .downloaded,
-            let localPath = local.localPath,
-            FileManager.default.fileExists(atPath: localPath)
+        static func hydrate(_ local: FileAttachment) async throws -> FileAttachment
         {
-            return
+            // Already cached locally
+            if local.downloadState == .downloaded,
+                let localPath = local.localPath,
+                FileManager.default.fileExists(atPath: localPath)
+            {
+                return local
+            }
+            do {
+                // Mark downloading
+                try await updateState(
+                    local,
+                    state: .downloading
+                )
+
+                let data = try await downloadFromRemote(
+                    storagePath: local.storagePath
+                )
+
+                let fileName =
+                    local.storagePath.split(separator: "/").last.map({ String($0) })
+                    ?? local.storagePath.replacingOccurrences(of: "/", with: "_")
+
+                let localURL = try localURL(
+                    for: local.id,
+                    fileName: fileName,
+                    userId: local.createdBy
+                )
+
+                // check again to make sure there not overriding existing ones in case some other download process ran in parallel.
+                if let new = try await FileAttachment.fetchLocal(local.id),
+                    new.downloadState == .downloaded,
+                    let localPath = new.localPath,
+                    FileManager.default.fileExists(atPath: localPath)
+                {
+                    return new
+                }
+
+                try data.write(to: localURL, options: .atomic)
+                // Update local DB metadata
+                var updated = local
+                updated.localPath = localURL.path
+                updated.downloadState = .downloaded
+
+                try await self.local.save(record: updated.localPayload)
+                return updated
+            } catch {
+                try await updateState(
+                    local,
+                    state: .notDownloaded
+                )
+                logError( "error downloading attachment: \(error.localizedDescription)")
+                throw error
+            }
         }
-        do {
-            // Mark downloading
-            try await updateState(
-                local,
-                state: .downloading
-            )
-
-            let data = try await downloadFromRemote(
-                storagePath: local.storagePath
-            )
-            let fileName =
-                local.storagePath.split(separator: "/").last.map({ String($0) })
-                ?? local.storagePath.replacingOccurrences(of: "/", with: "_")
-
-            let localURL = try localURL(
-                for: local.id,
-                fileName: fileName,
-                userId: local.createdBy
-            )
-
-            try data.write(to: localURL, options: .atomic)
-
-            // Update local DB metadata
-            var updated = local
-            updated.localPath = localURL.path
-            updated.downloadState = .downloaded
-
-            try await self.local.save(record: updated.localPayload)
-
-        } catch {
-            try await updateState(
-                local,
-                state: .notDownloaded
-            )
-            logError("error downloading attachment: \(error.localizedDescription)")
-            throw error
-        }
-
-    }
 
     static func pushLocal(_ local: FileAttachment) async throws {
         guard local.downloadState == .downloaded,

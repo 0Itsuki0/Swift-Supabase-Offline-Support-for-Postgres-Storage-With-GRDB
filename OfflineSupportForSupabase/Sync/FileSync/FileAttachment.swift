@@ -38,9 +38,9 @@ nonisolated
     var syncStatus: SyncStatus
 
     var data: Data {
-        get async throws {
+        mutating get async throws {
             do {
-                try await FileSyncManager.hydrate(self)
+                self = try await FileSyncManager.hydrate(self)
                 guard let localPath else {
                     throw SyncError.fileHydrationError(
                         "failed to get local cache."
@@ -271,7 +271,7 @@ nonisolated extension FileAttachment {
             switch remote.operation {
             case .upsert:
                 var local = remote
-                try await FileSyncManager.hydrate(local)
+                local = try await FileSyncManager.hydrate(local)
                 local.syncStatus = .synced
                 try await AppDependencies.shared.localDB.save(
                     record: local.localPayload
@@ -372,7 +372,7 @@ nonisolated extension FileAttachment {
         switch remote.operation {
         case .upsert:
             var updated = remote
-            try await FileSyncManager.hydrate(updated)
+            updated = try await FileSyncManager.hydrate(updated)
             updated.syncStatus = .synced
             updated = try await self.upsertLocal(updated)
             return .handled(updated)
@@ -384,8 +384,14 @@ nonisolated extension FileAttachment {
     }
 }
 
-// MARK: - CRUD override
+// MARK: - CRUD override/helpers
 nonisolated extension FileAttachment {
+    static func fetchLocal(_ id: UUID) async throws -> FileAttachment? {
+        let attachment = try await FileAttachment.fetchOne(id)
+            .first { _ in return true }
+        return attachment ?? nil
+    }
+
     mutating func upsert() async throws {
         self.syncStatus = .pending
         self = try await Self.upsertLocal(self)

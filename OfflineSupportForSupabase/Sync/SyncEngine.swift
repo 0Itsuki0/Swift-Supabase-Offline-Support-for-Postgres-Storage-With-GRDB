@@ -374,6 +374,7 @@ nonisolated
 
     static func upsert(record: Record) async throws -> Record {
         var record = record
+        record.operation = .upsert
         record.syncStatus = .pending
         record.updatedAt = Date()
         try await self.local.save(record: record.localPayload)
@@ -393,6 +394,7 @@ nonisolated
 
     static func delete(record: Record) async throws {
         var record = record
+        record.operation = .delete
         record.syncStatus = .deleted
         record.updatedAt = Date()
         try await self.local.save(record: record.localPayload)
@@ -401,7 +403,6 @@ nonisolated
             return
         }
         do {
-            record.operation = .delete
             let _ = try await remote.upsert(
                 into: Record.databaseTableName,
                 record: record.remotePayload
